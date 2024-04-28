@@ -45,9 +45,10 @@ images = tf.data.Dataset.list_files('data\\images\\*.jpg',shuffle = False)
 
 images.as_numpy_iterator().next()
 
+# Define a function to load images from file paths
 def load_image(x): 
-    byte_img = tf.io.read_file(x)
-    img = tf.io.decode_jpeg(byte_img)
+    byte_img = tf.io.read_file(x) # Read the image file as a byte string
+    img = tf.io.decode_jpeg(byte_img) # Decode the byte string to an image tensor
     return img
 
 images = images.map(load_image)
@@ -56,26 +57,31 @@ images.as_numpy_iterator().next()
 
 type(images)
 
+# View Raw Images with Matplotlib
+# Create an iterator for the image dataset
 image_generator = images.batch(4).as_numpy_iterator()
 
+# Get the next batch of images
 plot_images = image_generator.next()
 
+# Create a subplot for each image in the batch
 fig, ax = plt.subplots(ncols=4, figsize=(20,20))
-for idx, image in enumerate(plot_images):
+for idx, image in enumerate(plot_images): # Display each image in the subplot
     ax[idx].imshow(image) 
 plt.show()
 
-
+# Iterate through the partitions
 for folder in ['train','test','val']:
-    for file in os.listdir(os.path.join('data', folder, 'images')):
+    for file in os.listdir(os.path.join('data', folder, 'images')): # Iterate through the image files in each partition
         
+        # Extract the filename without extension
         filename = file.split('.')[0]+'.json'
-        existing_filepath = os.path.join('data','labels', filename)
-        if os.path.exists(existing_filepath): 
+        existing_filepath = os.path.join('data','labels', filename) # Define the path to the corresponding label file
+        if os.path.exists(existing_filepath): # Check if the label file exists
             new_filepath = os.path.join('data',folder,'labels',filename)
             os.replace(existing_filepath, new_filepath)   
 
-
+# Define augmentation pipeline
 augmentor = alb.Compose([alb.RandomCrop(width=450, height=450), 
                          alb.HorizontalFlip(p=0.5), 
                          alb.RandomBrightnessContrast(p=0.2),
@@ -91,6 +97,7 @@ with open(os.path.join('data', 'train', 'labels', 'f5ac1b32-ff8a-11ee-ad4a-9c6b0
 
 label['shapes'][0]['points']
 
+# Extract Coordinates and Rescale to Match Image Resolution
 coords = [0,0,0,0]
 coords[0] = label['shapes'][0]['points'][0][0]
 coords[1] = label['shapes'][0]['points'][0][1]
@@ -101,10 +108,12 @@ coords
 coords = list(np.divide(coords, [640,480,640,480]))
 coords
 
+# Apply augmentations to the image and bounding box
 augmented = augmentor(image=img, bboxes=[coords], class_labels=['face'])
 augmented['bboxes'][0][2:]
 augmented['bboxes']
 
+# Display the augmented image with bounding box
 cv2.rectangle(augmented['image'], 
               tuple(np.multiply(augmented['bboxes'][0][:2], [450,450]).astype(int)),
               tuple(np.multiply(augmented['bboxes'][0][2:], [450,450]).astype(int)), 
@@ -154,16 +163,19 @@ plt.imshow(augmented['image'])
 #         except Exception as e:
 #             print(e)
 
+# Load augmented images for training
 train_images = tf.data.Dataset.list_files('aug_data\\train\\images\\*.jpg', shuffle=False)
 train_images = train_images.map(load_image)
 train_images = train_images.map(lambda x: tf.image.resize(x, (120,120)))
 train_images = train_images.map(lambda x: x/255)
 
+# Load augmented images for testing
 test_images = tf.data.Dataset.list_files('aug_data\\test\\images\\*.jpg', shuffle=False)
 test_images = test_images.map(load_image)
 test_images = test_images.map(lambda x: tf.image.resize(x, (120,120)))
 test_images = test_images.map(lambda x: x/255)
 
+# Load augmented images for validation
 val_images = tf.data.Dataset.list_files('aug_data\\val\\images\\*.jpg', shuffle=False)
 val_images = val_images.map(load_image)
 val_images = val_images.map(lambda x: tf.image.resize(x, (120,120)))
@@ -171,46 +183,54 @@ val_images = val_images.map(lambda x: x/255)
 
 images.as_numpy_iterator().next()
 
-
+# Define a function to load labels from JSON files
 def load_labels(label_path):
     with open(label_path.numpy(), 'r', encoding = "utf-8") as f:
         label = json.load(f)
         
     return [label['class']], label['bbox']
 
+# Load labels for training dataset
 train_labels = tf.data.Dataset.list_files('aug_data\\train\\labels\\*.json', shuffle=False)
 train_labels = train_labels.map(lambda x: tf.py_function(load_labels, [x], [tf.uint8, tf.float16]))
 
+# Load labels for testing dataset
 test_labels = tf.data.Dataset.list_files('aug_data\\test\\labels\\*.json', shuffle=False)
 test_labels = test_labels.map(lambda x: tf.py_function(load_labels, [x], [tf.uint8, tf.float16]))
 
+# Load labels for validation dataset
 val_labels = tf.data.Dataset.list_files('aug_data\\val\\labels\\*.json', shuffle=False)
 val_labels = val_labels.map(lambda x: tf.py_function(load_labels, [x], [tf.uint8, tf.float16]))
 
+# Get a sample label from the training dataset
 train_labels.as_numpy_iterator().next()
 
-
+# Calculate the lengths of different partitions
 len(train_images), len(train_labels), len(test_images), len(test_labels), len(val_images), len(val_labels)
 
+# Combine images and labels for training dataset
 train = tf.data.Dataset.zip((train_images, train_labels))
 train = train.shuffle(5000)
 train = train.batch(8)
 train = train.prefetch(4)
 
+# Combine images and labels for testing dataset
 test = tf.data.Dataset.zip((test_images, test_labels))
 test = test.shuffle(1300)
 test = test.batch(8)
 test = test.prefetch(4)
 
+# Combine images and labels for validation dataset
 val = tf.data.Dataset.zip((val_images, val_labels))
 val = val.shuffle(1000)
 val = val.batch(8)
 val = val.prefetch(4)
 
+# Get a sample from the training dataset to visualize
 train.as_numpy_iterator().next()[1]
 
+# Get a sample batch from the dataset
 data_samples = train.as_numpy_iterator()
-
 res = data_samples.next()
 
 fig, ax = plt.subplots(ncols=4, figsize=(20,20))
@@ -243,7 +263,7 @@ vgg.summary()
 def build_model(): 
     input_layer = Input(shape=(120,120,3))
     
-    vgg = VGG16(include_top=False)(input_layer)
+    vgg = VGG16(include_top=False)(input_layer) # Pass input through VGG16 model
 
     # Classification Model  
     f1 = GlobalMaxPooling2D()(vgg)
@@ -258,6 +278,7 @@ def build_model():
     facetracker = Model(inputs=input_layer, outputs=[class2, regress2])
     return facetracker
 
+# Get a sample batch of images and make predictions using the model
 facetracker = build_model()
 facetracker.summary()
 X, y = train.as_numpy_iterator().next()
@@ -265,12 +286,13 @@ X.shape
 classes, coords = facetracker.predict(X)
 classes, coords
 
-
+# Calculate the number of batches per epoch
 batches_per_epoch = len(train)
-lr_decay = (1./0.75 -1)/batches_per_epoch
+lr_decay = (1./0.75 -1)/batches_per_epoch # Calculate the learning rate decay
 
-opt = tf.keras.optimizers.Adam(learning_rate=0.0001, decay=lr_decay)
+opt = tf.keras.optimizers.Adam(learning_rate=0.0001, decay=lr_decay) 
 
+# Define the localization loss function
 def localization_loss(y_true, yhat):            
     delta_coord = tf.reduce_sum(tf.square(y_true[:,:2] - yhat[:,:2]))
                   
@@ -292,7 +314,7 @@ classloss(y[0], classes)
 regressloss(y[1], coords)
 
 
-#Section 10
+# Define a custom model class inheriting from tf.keras.Model
 class FaceTracker(Model): 
     def __init__(self, eyetracker, **kwargs): 
         super().__init__(**kwargs)
@@ -353,6 +375,7 @@ hist = model.fit(train, epochs=10, validation_data=val, callbacks=[tensorboard_c
 keys = hist.history.keys()
 fig, ax = plt.subplots(ncols=3, figsize=(20,5))
 
+# Plot the training history (losses)
 if 'total_loss' in keys and 'val_total_loss' in keys:
     ax[0].plot(hist.history['total_loss'], color='teal', label='loss')
     ax[0].plot(hist.history['val_total_loss'], color='orange', label='val loss')
@@ -373,7 +396,7 @@ if 'regress_loss' in keys and 'val_regress_loss' in keys:
 
 plt.show()
 
-
+# Make predictions on test set 
 test_data = test.as_numpy_iterator()
 test_sample = test_data.next()
 yhat = facetracker.predict(test_sample[0])
@@ -406,6 +429,7 @@ for idx in range(4):
     ax[idx].imshow(cv2.cvtColor(sample_image, cv2.COLOR_BGR2RGB))
     ax[idx].axis('off')  # Turn off axis
 
+# Save the model
 facetracker.save('facetracker.keras')
 facetracker = load_model('facetracker.keras')
 
