@@ -317,11 +317,11 @@ regressloss(y[1], coords)
 # Define a custom model class inheriting from tf.keras.Model
 class FaceTracker(Model): 
     def __init__(self, eyetracker, **kwargs): 
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # Initializes the FaceTracker with an instance of a model that performs the actual eye tracking
         self.model = eyetracker
 
     def compile(self, opt, classloss, localizationloss, **kwargs):
-        super().compile(**kwargs)
+        super().compile(**kwargs) # Store the optimizer, classification loss function, and localization loss function
         self.closs = classloss
         self.lloss = localizationloss
         self.opt = opt
@@ -330,23 +330,29 @@ class FaceTracker(Model):
         X, y = batch
 
         with tf.GradientTape() as tape: 
+            # Forward pass: compute the predictions from the model
             classes, coords = self.model(X, training=True)
 
             # Use reshaped tensors for loss computation
             y0_reshaped = tf.reshape(y[0], [-1])  # Ensure y[0] is a 1D tensor matching the batch size
             y1_reshaped = tf.cast(tf.reshape(y[1], [-1, tf.shape(y[1])[-1]]), tf.float32)  # Ensure proper shape for coordinates
 
+            # Compute losses
             batch_classloss = self.closs(y0_reshaped, classes)
             batch_localizationloss = self.lloss(y1_reshaped, coords)
             
+            # Combine the losses for the total loss used in training
             total_loss = batch_localizationloss + 0.5 * batch_classloss
             
             grad = tape.gradient(total_loss, self.model.trainable_variables)
         
+        # Apply gradients made from losses
         self.opt.apply_gradients(zip(grad, self.model.trainable_variables))
         
+        # Return a dictionary of the computed losses
         return {"total_loss": total_loss, "class_loss": batch_classloss, "regress_loss": batch_localizationloss}
     
+    # Testing same steps
     def test_step(self, batch, **kwargs): 
         X, y = batch
         
@@ -365,8 +371,8 @@ class FaceTracker(Model):
     def call(self, X, **kwargs): 
         return self.model(X, **kwargs)
         
-model = FaceTracker(facetracker)
-model.compile(opt, classloss, regressloss)
+model = FaceTracker(facetracker) # Create FaceTracker model
+model.compile(opt, classloss, regressloss) # Compile the model with an optimizer and loss functions
 
 logdir='logs'
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
